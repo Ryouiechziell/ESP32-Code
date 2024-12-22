@@ -2,6 +2,7 @@
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <Servo.h>
+#include <HTTPClient.h>
 
 #define pin36 36;
 #define pin39 39;
@@ -36,6 +37,7 @@ const char* password = "muhammadnazril";
 // Create objek server
 AsyncWebServer server(80);
 Servo myServo;
+HTTPClient http;
 
 // Handle operation
 String handlePinOperation(int pin, String operation, String value = "") {
@@ -258,59 +260,105 @@ void setup() {
 
   // Endpoint untuk mengontrol servo
 server.on("/servo", HTTP_GET, [](AsyncWebServerRequest *request){
-    String angle = request->hasParam("angle") ? request->getParam("angle")->value() : "";
-    StaticJsonDocument<256> doc;
+  String angle = request->hasParam("angle") ? request->getParam("angle")->value() : "";
+  StaticJsonDocument<256> doc;
 
-    if (angle != "") {
-        int angleValue = angle.toInt();
-        if (angleValue >= 0 && angleValue <= 180) {
-            myServo.write(angleValue); // Set posisi servo
-            doc["servo"] = "Position set to " + String(angleValue) + " degrees.";
-        } else {
-            doc["error"] = "Invalid angle. Please provide a value between 0 and 180.";
-        }
-    } else {
-        doc["error"] = "Missing angle parameter.";
-    }
+  if (angle != "") {
+      int angleValue = angle.toInt();
+      if (angleValue >= 0 && angleValue <= 180) {
+          myServo.write(angleValue); // Set posisi servo
+          doc["servo"] = "Position set to " + String(angleValue) + " degrees.";
+      } else {
+          doc["error"] = "Invalid angle. Please provide a value between 0 and 180.";
+      }
+  } else {
+      doc["error"] = "Missing angle parameter.";
+  }
 
-    String jsonResponse;
-    serializeJson(doc, jsonResponse);
-    request->send(200, "application/json", jsonResponse);
+  String jsonResponse;
+  serializeJson(doc, jsonResponse);
+  request->send(200, "application/json", jsonResponse);
 });
 
 // Endpoint untuk membaca sensor ultrasonic dengan pin yang dinamis
 server.on("/ultrasonic", HTTP_GET, [](AsyncWebServerRequest *request){
-    // Mengambil parameter pin trig dan echo
-    String trigPinParam = request->hasParam("trigPin") ? request->getParam("trigPin")->value() : "";
-    String echoPinParam = request->hasParam("echoPin") ? request->getParam("echoPin")->value() : "";
+  // Mengambil parameter pin trig dan echo
+  String trigPinParam = request->hasParam("trigPin") ? request->getParam("trigPin")->value() : "";
+  String echoPinParam = request->hasParam("echoPin") ? request->getParam("echoPin")->value() : "";
 
-    StaticJsonDocument<256> doc;
+  StaticJsonDocument<256> doc;
 
-    if (trigPinParam != "" && echoPinParam != "") {
-        int trigPin = trigPinParam.toInt();
-        int echoPin = echoPinParam.toInt();
+  if (trigPinParam != "" && echoPinParam != "") {
+      int trigPin = trigPinParam.toInt();
+      int echoPin = echoPinParam.toInt();
 
-        // Mengirimkan pulsa trig
-        digitalWrite(trigPin, LOW);
-        delayMicroseconds(2);
-        digitalWrite(trigPin, HIGH);
-        delayMicroseconds(10);
-        digitalWrite(trigPin, LOW);
+      // Mengirimkan pulsa trig
+      digitalWrite(trigPin, LOW);
+      delayMicroseconds(2);
+      digitalWrite(trigPin, HIGH);
+      delayMicroseconds(10);
+      digitalWrite(trigPin, LOW);
 
-        // Membaca durasi pulsa dari echo
-        long duration = pulseIn(echoPin, HIGH);
-        long distance = duration * 0.0344 / 2;  // Kecepatan suara: 343 m/s (0.0344 cm/µs)
+      // Membaca durasi pulsa dari echo
+      long duration = pulseIn(echoPin, HIGH);
+      long distance = duration * 0.0344 / 2;  // Kecepatan suara: 343 m/s (0.0344 cm/µs)
 
-        doc["distance"] = distance;
-    } else {
-        doc["error"] = "Missing trigPin or echoPin parameter.";
-    }
+      doc["distance"] = distance;
+  } else {
+      doc["error"] = "Missing trigPin or echoPin parameter.";
+  }
 
-    String jsonResponse;
-    serializeJson(doc, jsonResponse);
-    request->send(200, "application/json", jsonResponse);
+  String jsonResponse;
+  serializeJson(doc, jsonResponse);
+  request->send(200, "application/json", jsonResponse);
 });
 
+// Endpoint untuk mengirim HTTP berdasarkan parameter
+server.on("/http", HTTP_GET, [](AsyncWebServerRequest *request){
+  String url = request->hasParam("url") ? request->getParam("url")->value() : "";
+  String method = request->hasParam("method") ? request->getParam("method")->value() : "GET"; // Default to GET
+  String payload = request->hasParam("payload") ? request->getParam("payload")->value() : "";
+    
+  StaticJsonDocument<512> doc;
+    
+  if (url != "") {
+    http.begin(url);  // Inisialisasi koneksi ke URL yang diberikan
+
+    // Tentukan metode HTTP yang akan digunakan (GET/POST)
+    if (method == "POST") {
+      http.addHeader("Content-Type", "application/json"); // Contoh header untuk POST request
+      int httpResponseCode = http.POST(payload); // Kirimkan payload sebagai POST
+      if (httpResponseCode > 0) {
+          doc["status"] = "Success";
+          doc["responseCode"] = httpResponseCode;
+          doc["response"] = http.getString(); // Mendapatkan respons dari server
+      } else {
+          doc["error"] = "HTTP POST request failed";
+          doc["responseCode"] = httpResponseCode;
+        }
+    } else {
+        int httpResponseCode = http.GET();  // Kirimkan GET request
+        if (httpResponseCode > 0) {
+          doc["status"] = "Success";
+          doc["responseCode"] = httpResponseCode;
+          doc["response"] = http.getString(); // Mendapatkan respons dari server
+        } else {
+            doc["error"] = "HTTP GET request failed";
+            doc["responseCode"] = httpResponseCode;
+        }
+    }
+    http.end(); // Tutup koneksi HTTP
+  } else {
+      doc["error"] = "Missing URL parameter.";
+  }
+
+  // Mengonversi objek JSON ke string
+  String jsonResponse;
+  serializeJson(doc, jsonResponse);
+
+  // Kirim respons dalam format JSON
+  request->send(200, "application/json", jsonResponse);
+});
   
   // Memulai server
   server.begin();
