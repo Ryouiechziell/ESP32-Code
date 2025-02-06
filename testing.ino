@@ -16,6 +16,7 @@ const char* password = "0123456789";
 #define pinSensorPir 35
 #define pinTrig 12
 #define pinEcho 13
+#define pinSound 36  // Pin untuk sensor suara
 
 // **Konfigurasi Motor L298N**
 #define motor1A 32  
@@ -147,6 +148,19 @@ void handleMP3Control() {
   server.send(200, "application/json", jsonResponse);
 }
 
+// 📌 **Fungsi Handle Sound Detector**
+void handleSoundDetected() {
+  Serial.println("Suara terdeteksi!");
+
+  StaticJsonDocument<200> doc;
+  doc["status"] = "success";
+  doc["message"] = "Sound detected";
+
+  String jsonResponse;
+  serializeJson(doc, jsonResponse);
+  server.send(200, "application/json", jsonResponse);
+}
+
 // 📌 **Setup ESP32**
 void setup() {
   Serial.begin(115200);
@@ -169,6 +183,7 @@ void setup() {
   pinMode(pinSensorPir, INPUT);
   pinMode(pinTrig, OUTPUT);
   pinMode(pinEcho, INPUT);
+  pinMode(pinSound, INPUT);  // Inisialisasi pin sound detector
 
   // **Setup PWM**
   ledcSetup(PWM_CHANNEL_1, PWM_FREQUENCY, PWM_RESOLUTION);
@@ -194,6 +209,7 @@ void setup() {
   server.on("/ultrasonic", HTTP_GET, handleUltrasonicSensor);
   server.on("/mp3", HTTP_GET, handleMP3Control);
   server.on("/car", HTTP_GET, handleCarControl);
+  server.on("/sound", HTTP_GET, handleSoundDetected);  // Tambahkan endpoint sound detector
 
   server.begin();
 }
