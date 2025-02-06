@@ -12,11 +12,11 @@ const char* password = "0123456789";
 #define RXD2 16
 #define TXD2 17
 #define pinLDR 34  
-#define pinServo 23
+#define pinServo 22
 #define pinSensorPir 35
 #define pinTrig 12
 #define pinEcho 13
-#define pinSound 36  // Pin untuk sensor suara
+#define pinSound 36 
 
 // **Konfigurasi Motor L298N**
 #define motor1A 32  
@@ -37,6 +37,39 @@ WebServer server(80);
 HardwareSerial mySerial(2);
 DFRobotDFPlayerMini mp3;
 ESP32Servo myServo;
+
+int mp3Volume = 20;
+
+void handleSetVariable() {
+    if (!server.hasArg("name") || !server.hasArg("value")) {
+        server.send(400, "application/json", "{\"error\":\"Missing parameters\"}");
+        return;
+    }
+
+    String varName = server.arg("name");
+    int varValue = server.arg("value").toInt();
+
+    StaticJsonDocument<200> doc;
+    doc["status"] = "success";
+
+    if (varName == "mp3_volume") {
+        if (varValue < 0 || varValue > 30) {
+            server.send(400, "application/json", "{\"error\":\"Volume must be between 0 and 30\"}");
+            return;
+        }
+        mp3Volume = varValue;
+        mp3.volume(mp3Volume);
+        doc["message"] = "MP3 volume set to " + String(mp3Volume);
+    } else {
+        server.send(400, "application/json", "{\"error\":\"Unknown variable\"}");
+        return;
+    }
+
+    String jsonResponse;
+    serializeJson(doc, jsonResponse);
+    server.send(200, "application/json", jsonResponse);
+}
+
 
 void handleLDRSensor() {
   int ldrValue = analogRead(pinLDR);
@@ -200,7 +233,7 @@ void setup() {
     Serial.println("Gagal menghubungkan DFPlayer Mini!");
     while (true);
   }
-  mp3.volume(20);
+  mp3.volume(mp3Volume);
 
   // **Tambahkan endpoint**
   server.on("/ldr", HTTP_GET, handleLDRSensor);
@@ -209,7 +242,8 @@ void setup() {
   server.on("/ultrasonic", HTTP_GET, handleUltrasonicSensor);
   server.on("/mp3", HTTP_GET, handleMP3Control);
   server.on("/car", HTTP_GET, handleCarControl);
-  server.on("/sound", HTTP_GET, handleSoundDetected);  // Tambahkan endpoint sound detector
+  server.on("/sound", HTTP_GET, handleSoundDetected);
+  server.on("/set", HTTP_GET, handleSetVariable);
 
   server.begin();
 }
